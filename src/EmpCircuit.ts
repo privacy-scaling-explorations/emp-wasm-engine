@@ -91,7 +91,7 @@ export default class EmpCircuit {
     this.outputs = [...outputNames];
     this.outputs.sort((a, b) => this.getOldAddress(a) - this.getOldAddress(b));
 
-    // The emp-wasm backend requires each party's input bits to be contiguous.
+    // The emp-wasm engine requires each party's input bits to be contiguous.
     const allInputsInPartyOrder: string[] = [];
 
     for (const partyName of this.partyNames) {
