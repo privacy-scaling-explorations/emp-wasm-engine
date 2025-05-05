@@ -3,7 +3,7 @@ import { expect } from 'chai';
 import { Protocol } from 'mpc-framework';
 import * as summon from 'summon-ts';
 
-import { EmpWasmBackend } from '../src';
+import { EmpWasmEngine } from '../src';
 
 import { test } from './helpers/suite';
 import AsyncQueueStore from './helpers/AsyncQueueStore';
@@ -26,7 +26,7 @@ test("max(3, 5) === 5", async () => {
     },
   });
 
-  const protocol = new Protocol(circuit, new EmpWasmBackend());
+  const protocol = new Protocol(circuit, new EmpWasmEngine());
   const aqs = new AsyncQueueStore<Uint8Array>();
 
   const outputs = await Promise.all([
@@ -70,7 +70,7 @@ test("middle(8, 17, 5) == 8", async () => {
     },
   });
 
-  const protocol = new Protocol(circuit, new EmpWasmBackend());
+  const protocol = new Protocol(circuit, new EmpWasmEngine());
   const aqs = new AsyncQueueStore<Uint8Array>();
 
   const outputs = await Promise.all([
@@ -123,7 +123,7 @@ test("vickrey(8, 17, 5) == [1, 8]", async () => {
     },
   });
 
-  const protocol = new Protocol(circuit, new EmpWasmBackend());
+  const protocol = new Protocol(circuit, new EmpWasmEngine());
   const aqs = new AsyncQueueStore<Uint8Array>();
 
   const outputs = await Promise.all([

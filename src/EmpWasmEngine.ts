@@ -8,7 +8,7 @@ import {
 import EmpWasmSession from "./EmpWasmSession.js";
 import EmpCircuit from "./EmpCircuit.js";
 
-export default class EmpWasmBackend implements Engine {
+export default class EmpWasmEngine implements Engine {
   run(
     circuit: Circuit,
     name: string,

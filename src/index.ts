@@ -1,1 +1,1 @@
-export { default as EmpWasmBackend } from "./EmpWasmBackend.js";
+export { default as EmpWasmEngine } from "./EmpWasmEngine.js";
