@@ -7,29 +7,22 @@ import { test } from './helpers/suite';
 test('correctly evals circuit', async () => {
   await summon.init();
 
-  const { circuit } = summon.compileBoolean('/src/main.ts', 4, {
-    '/src/main.ts': `
-      export default function main(a: number, b: number) {
-        return a * b;
-      }
-    `,
+  const { circuit } = summon.compile({
+    path: '/src/main.ts',
+    boolifyWidth: 4,
+    files: {
+      '/src/main.ts': `
+        export default (io: Summon.IO) => {
+          const a = io.input('alice', 'a', summon.number());
+          const b = io.input('bob', 'b', summon.number());
+
+          io.outputPublic('main', a * b);
+        }
+      `,
+    },
   });
 
-  const ec = new EmpCircuit(
-    circuit,
-    [
-      {
-        name: 'alice',
-        inputs: ['a'],
-        outputs: ['main'],
-      },
-      {
-        name: 'bob',
-        inputs: ['b'],
-        outputs: ['main'],
-      },
-    ],
-  );
+  const ec = new EmpCircuit(circuit);
 
   const outputs = ec.eval({
     alice: { a: 3 },

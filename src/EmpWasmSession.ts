@@ -1,4 +1,4 @@
-import { BackendSession, MpcSettings } from "mpc-framework-common";
+import { EngineSession, MpcSettings } from "mpc-framework-common";
 import { BufferQueue, secureMPC } from "emp-wasm";
 import { encode } from '@msgpack/msgpack';
 import { keccak_256 } from '@noble/hashes/sha3';
@@ -8,13 +8,12 @@ import buffersEqual from "./buffersEqual.js";
 import EmpCircuit from "./EmpCircuit.js";
 import sortKeys from 'sort-keys';
 
-export default class EmpWasmSession implements BackendSession {
+export default class EmpWasmSession implements EngineSession {
   bqs = new BufferQueueStore();
   result = defer<Record<string, unknown>>();
 
   constructor(
     public empCircuit: EmpCircuit,
-    public mpcSettings: MpcSettings,
     public input: Record<string, unknown>,
     public rawSend: (to: string, msg: Uint8Array) => void,
     public thisPartyName: string,
@@ -43,7 +42,7 @@ export default class EmpWasmSession implements BackendSession {
 
   async run() {
     const setupValue = sortKeys(
-      [this.empCircuit.originalCircuit, this.mpcSettings],
+      this.empCircuit.originalCircuit,
       { deep: true },
     );
 

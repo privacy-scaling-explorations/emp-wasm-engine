@@ -26,26 +26,25 @@ export default class EmpCircuit {
   private allInputs: string[];
   private outputs: string[];
 
-  // old wire id -> new wire id
-  private wireIdMap = new Map<number, number>();
-  private firstOutputWireId: number;
+  private getOldAddress: (name: string) => number;
 
-  private nextWireId = 0;
-  private nextOutputWireId = -1;
+  // old address -> new address
+  private addressMap = new Map<number, number>();
+  private firstOutputAddress: number;
 
-  private zeroWireId?: number;
+  private nextAddress = 0;
+  private nextOutputAddress = -1;
 
-  constructor(
-    circuit: Circuit,
-    mpcSettings: MpcSettings,
-  ) {
+  private zeroWireAddress?: number;
+
+  constructor(circuit: Circuit) {
     this.bristol = parseBristol(circuit.bristol);
     this.originalCircuit = circuit;
 
     const partyNamesSet = new Set<string>();
 
-    for (let i = 0; i < mpcSettings.length; i++) {
-      const partyName = mpcSettings[i].name ?? `party${i}`;
+    for (let i = 0; i < circuit.mpcSettings.length; i++) {
+      const partyName = circuit.mpcSettings[i].name ?? `party${i}`;
       this.partyNames.push(partyName);
 
       assert(!partyNamesSet.has(partyName), `Duplicate party name ${partyName}`);
@@ -54,34 +53,43 @@ export default class EmpCircuit {
 
     this.allInputs = [];
 
+    this.getOldAddress = (() => {
+      const addressesByName = new Map<string, number>([
+        ...circuit.info.inputs.map(input => [input.name, input.address] as const),
+        ...circuit.info.outputs.map(output => [output.name, output.address] as const),
+      ]);
+
+      return (name: string) => {
+        const address = addressesByName.get(name);
+        assert(address !== undefined, `Address for ${name} not found`);
+
+        return address;
+      };
+    })();
+
     for (const [i, partyName] of this.partyNames.entries()) {
-      this.partyInputs[partyName] = mpcSettings[i].inputs.slice();
+      this.partyInputs[partyName] = circuit.mpcSettings[i].inputs.slice();
       this.partyInputs[partyName].sort((a, b) =>
-        circuit.info.input_name_to_wire_index[a] -
-        circuit.info.input_name_to_wire_index[b],
+        this.getOldAddress(a) - this.getOldAddress(b),
       );
 
       this.allInputs.push(...this.partyInputs[partyName]);
     }
 
-    this.allInputs.sort((a, b) =>
-      circuit.info.input_name_to_wire_index[a] -
-      circuit.info.input_name_to_wire_index[b],
+    this.allInputs.sort(
+      (a, b) => this.getOldAddress(a) - this.getOldAddress(b),
     );
 
     const outputNames = new Set<string>();
 
-    for (const mpcSetting of mpcSettings) {
+    for (const mpcSetting of circuit.mpcSettings) {
       for (const output of mpcSetting.outputs) {
         outputNames.add(output);
       }
     }
 
     this.outputs = [...outputNames];
-    this.outputs.sort((a, b) =>
-      circuit.info.output_name_to_wire_index[a] -
-      circuit.info.output_name_to_wire_index[b],
-    );
+    this.outputs.sort((a, b) => this.getOldAddress(a) - this.getOldAddress(b));
 
     // The emp-wasm backend requires each party's input bits to be contiguous.
     const allInputsInPartyOrder: string[] = [];
@@ -92,20 +100,20 @@ export default class EmpCircuit {
 
     for (const inputName of allInputsInPartyOrder) {
       const width = this.getInputWidth(inputName);
-      const oldWireId = this.originalCircuit.info.input_name_to_wire_index[inputName];
-      assert(oldWireId !== undefined, `Input ${inputName} not found`);
+      const oldAddress = this.getOldAddress(inputName);
+      assert(oldAddress !== undefined, `Input ${inputName} not found`);
 
       for (let i = 0; i < width; i++) {
-        const newWireId = this.assignWireId('normal');
-        this.wireIdMap.set(oldWireId + i, newWireId);
+        const newAddress = this.assignAddress('normal');
+        this.addressMap.set(oldAddress + i, newAddress);
       }
     }
 
-    const oldFirstOutputWireId = this.originalCircuit.info.output_name_to_wire_index[this.outputs[0]];
+    const oldFirstOutputAddress = this.getOldAddress(this.outputs[0]);
 
     for (const g of this.bristol.gates) {
-      let outputWireId: number;
-      const wireType = g.output < oldFirstOutputWireId ? 'normal' : 'output';
+      let outputAddress: number;
+      const wireType = g.output < oldFirstOutputAddress ? 'normal' : 'output';
 
       // Note wireType:output means an output of the *circuit*, not just an
       // output of the gate
@@ -113,31 +121,31 @@ export default class EmpCircuit {
       switch (g.type) {
         case 'AND':
         case 'XOR': {
-          outputWireId = this.assignWireId(wireType);
+          outputAddress = this.assignAddress(wireType);
 
           this.gates.push({
             type: g.type,
-            left: this.getWireId(g.left),
-            right: this.getWireId(g.right),
-            output: outputWireId,
+            left: this.getAddress(g.left),
+            right: this.getAddress(g.right),
+            output: outputAddress,
           });
 
           if (g.type === 'XOR' && g.left === g.right) {
             // If the underlying circuit creates a zero wire we can also make
             // use of it
-            this.zeroWireId ??= outputWireId;
+            this.zeroWireAddress ??= outputAddress;
           }
 
           break;
         }
 
         case 'INV': {
-          outputWireId = this.assignWireId(wireType);
+          outputAddress = this.assignAddress(wireType);
 
           this.gates.push({
             type: 'INV',
-            input: this.getWireId(g.input),
-            output: outputWireId,
+            input: this.getAddress(g.input),
+            output: outputAddress,
           });
 
           break;
@@ -147,43 +155,43 @@ export default class EmpCircuit {
           never(g);
       }
 
-      this.wireIdMap.set(g.output, outputWireId);
+      this.addressMap.set(g.output, outputAddress);
     }
 
-    const outputWireCount = -this.nextOutputWireId - 1;
-    this.firstOutputWireId = this.nextWireId;
-    this.nextWireId += outputWireCount;
+    const outputWireCount = -this.nextOutputAddress - 1;
+    this.firstOutputAddress = this.nextAddress;
+    this.nextAddress += outputWireCount;
 
-    const reassignOutputWireId = (wireId: number) => {
-      assert(wireId < 0);
-      return this.firstOutputWireId - wireId - 1;
+    const reassignOutputAddress = (address: number) => {
+      assert(address < 0);
+      return this.firstOutputAddress - address - 1;
     };
 
     for (const g of this.gates) {
       if (g.output < 0) {
-        g.output = reassignOutputWireId(g.output);
+        g.output = reassignOutputAddress(g.output);
       }
 
       if (g.type === 'AND' || g.type === 'XOR') {
         if (g.left < 0) {
-          g.left = reassignOutputWireId(g.left);
+          g.left = reassignOutputAddress(g.left);
         }
 
         if (g.right < 0) {
-          g.right = reassignOutputWireId(g.right);
+          g.right = reassignOutputAddress(g.right);
         }
       } else if (g.type === 'INV') {
         if (g.input < 0) {
-          g.input = reassignOutputWireId(g.input);
+          g.input = reassignOutputAddress(g.input);
         }
       } else {
         never(g);
       }
     }
 
-    for (const [oldId, newId] of this.wireIdMap.entries()) {
+    for (const [oldId, newId] of this.addressMap.entries()) {
       if (newId < 0) {
-        this.wireIdMap.set(oldId, reassignOutputWireId(newId));
+        this.addressMap.set(oldId, reassignOutputAddress(newId));
       }
     }
 
@@ -206,30 +214,30 @@ export default class EmpCircuit {
       inputBits1 = 0;
     }
 
-    const wireCount = this.nextWireId;
+    const wireCount = this.nextAddress;
 
     this.metadata = {
       wireCount,
       inputBits0,
       inputBits1,
-      outputBits: wireCount - this.firstOutputWireId,
+      outputBits: wireCount - this.firstOutputAddress,
     };
   }
 
-  private getWireId(oldWireId: number): number {
-    const wireId = this.wireIdMap.get(oldWireId);
-    assert(wireId !== undefined, `Wire ID ${oldWireId} not found`);
+  private getAddress(oldAddress: number): number {
+    const address = this.addressMap.get(oldAddress);
+    assert(address !== undefined, `Address ${oldAddress} not found`);
 
-    return wireId;
+    return address;
   }
 
-  private assignWireId(type: 'normal' | 'output'): number {
+  private assignAddress(type: 'normal' | 'output'): number {
     if (type === 'normal') {
-      return this.nextWireId++;
+      return this.nextAddress++;
     }
 
     if (type === 'output') {
-      return this.nextOutputWireId--;
+      return this.nextOutputAddress--;
     }
 
     never(type);
@@ -330,14 +338,14 @@ export default class EmpCircuit {
 
     for (const outputName of this.outputs) {
       const width = this.getOutputWidth(outputName);
-      const oldWireId = this.originalCircuit.info.output_name_to_wire_index[outputName];
+      const oldAddress = this.getOldAddress(outputName);
 
       let value = 0;
 
       for (let i = 0; i < width; i++) {
-        const wireId = this.wireIdMap.get(oldWireId + i);
-        assert(wireId !== undefined, `Wire ID ${oldWireId + i} not found`);
-        value |= outputBits[wireId - this.firstOutputWireId] << i;
+        const address = this.addressMap.get(oldAddress + i);
+        assert(address !== undefined, `Address ${oldAddress + i} not found`);
+        value |= outputBits[address - this.firstOutputAddress] << i;
       }
 
       output[outputName] = value;
@@ -355,12 +363,12 @@ export default class EmpCircuit {
     // }
   ): Record<string, unknown> {
     const wires = new Uint8Array(this.metadata.wireCount);
-    let wireId = 0;
+    let address = 0;
 
     for (const party of this.partyNames) {
       assert(inputs[party] !== undefined, `Inputs for party ${party} not found`);
       for (const bit of this.encodeInput(party, inputs[party])) {
-        wires[wireId++] = bit;
+        wires[address++] = bit;
       }
     }
 
@@ -387,7 +395,7 @@ export default class EmpCircuit {
       }
     }
 
-    return this.decodeOutput(wires.subarray(this.firstOutputWireId));
+    return this.decodeOutput(wires.subarray(this.firstOutputAddress));
   }
 }
 
