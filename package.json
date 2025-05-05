@@ -1,7 +1,7 @@
 {
-  "name": "emp-wasm-backend",
-  "version": "0.4.0",
-  "description": "Backend for mpc-framework powered by emp-toolkit",
+  "name": "emp-wasm-engine",
+  "version": "0.5.0",
+  "description": "Engine for mpc-framework powered by emp-toolkit",
   "type": "module",
   "main": "dist/src/index.js",
   "scripts": {
@@ -22,7 +22,7 @@
   "author": "Andrew Morris",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/voltrevo/emp-wasm-backend.git"
+    "url": "git+https://github.com/voltrevo/emp-wasm-engine.git"
   },
   "license": "MIT",
   "devDependencies": {
@@ -31,9 +31,9 @@
     "chai": "^5.1.2",
     "ee-typed": "^0.1.1",
     "glob": "^11.0.1",
-    "mpc-framework": "^0.2.1",
+    "mpc-framework": "^0.3.0",
     "puppeteer-core": "^24.1.0",
-    "summon-ts": "^0.5.3",
+    "summon-ts": "^0.6.0",
     "tsx": "^4.9.3",
     "typescript": "^5.4.5",
     "vite": "^6.0.7"
@@ -42,7 +42,7 @@
     "@msgpack/msgpack": "^3.1.1",
     "@noble/hashes": "^1.7.1",
     "emp-wasm": "^0.2.2",
-    "mpc-framework-common": "^0.1.1",
+    "mpc-framework-common": "^0.3.0",
     "sort-keys": "^5.1.0"
   }
 }

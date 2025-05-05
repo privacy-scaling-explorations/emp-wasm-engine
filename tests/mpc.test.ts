@@ -11,33 +11,22 @@ import AsyncQueueStore from './helpers/AsyncQueueStore';
 test("max(3, 5) === 5", async () => {
   await summon.init();
 
-  const { circuit } = summon.compileBoolean('/src/main.ts', 16, {
-    '/src/main.ts': `
-      export default function main(a: number, b: number) {
-        return a > b ? a : b;
-      }
-    `,
+  const { circuit } = summon.compile({
+    path: '/src/main.ts',
+    boolifyWidth: 16,
+    files: {
+      '/src/main.ts': `
+        export default (io: Summon.IO) => {
+          const a = io.input('alice', 'a', summon.number());
+          const b = io.input('bob', 'b', summon.number());
+
+          io.outputPublic('main', a > b ? a : b);
+        };
+      `,
+    },
   });
 
-  const mpcSettings = [
-    {
-      name: 'alice',
-      inputs: ['a'],
-      outputs: ['main'],
-    },
-    {
-      name: 'bob',
-      inputs: ['b'],
-      outputs: ['main'],
-    },
-  ];
-
-  const protocol = new Protocol(
-    circuit,
-    mpcSettings,
-    new EmpWasmBackend(),
-  );
-
+  const protocol = new Protocol(circuit, new EmpWasmBackend());
   const aqs = new AsyncQueueStore<Uint8Array>();
 
   const outputs = await Promise.all([
@@ -51,56 +40,37 @@ test("max(3, 5) === 5", async () => {
 test("middle(8, 17, 5) == 8", async () => {
   await summon.init();
 
-  const { circuit } = summon.compileBoolean('/src/main.ts', 8, {
-    '/src/main.ts': `
-      export default function main(
-        a: number,
-        b: number,
-        c: number,
-      ) {
-        const nums = [a, b, c];
+  const { circuit } = summon.compile({
+    path: '/src/main.ts',
+    boolifyWidth: 8,
+    files: {
+      '/src/main.ts': `
+        export default (io: Summon.IO) => {
+          const nums = [
+            io.input('alice', 'a', summon.number()),
+            io.input('bob', 'b', summon.number()),
+            io.input('charlie', 'c', summon.number()),
+          ];
 
-        let highest = a;
-        let secondHighest = 0;
+          let highest = nums[0];
+          let secondHighest = 0;
 
-        for (let i = 1; i < nums.length; i++) {
-          if (nums[i] > highest) {
-            secondHighest = highest;
-            highest = nums[i];
-          } else if (nums[i] > secondHighest) {
-            secondHighest = nums[i];
+          for (let i = 1; i < nums.length; i++) {
+            if (nums[i] > highest) {
+              secondHighest = highest;
+              highest = nums[i];
+            } else if (nums[i] > secondHighest) {
+              secondHighest = nums[i];
+            }
           }
-        }
 
-        return secondHighest;
-      }
-    `,
+          io.outputPublic('main', secondHighest);
+        };
+      `,
+    },
   });
 
-  const mpcSettings = [
-    {
-      name: 'alice',
-      inputs: ['a'],
-      outputs: ['main'],
-    },
-    {
-      name: 'bob',
-      inputs: ['b'],
-      outputs: ['main'],
-    },
-    {
-      name: 'charlie',
-      inputs: ['c'],
-      outputs: ['main'],
-    },
-  ];
-
-  const protocol = new Protocol(
-    circuit,
-    mpcSettings,
-    new EmpWasmBackend(),
-  );
-
+  const protocol = new Protocol(circuit, new EmpWasmBackend());
   const aqs = new AsyncQueueStore<Uint8Array>();
 
   const outputs = await Promise.all([
@@ -120,58 +90,40 @@ test("middle(8, 17, 5) == 8", async () => {
 test("vickrey(8, 17, 5) == [1, 8]", async () => {
   await summon.init();
 
-  const { circuit } = summon.compileBoolean('/src/main.ts', 8, {
-    '/src/main.ts': `
-      export default function main(
-        a: number,
-        b: number,
-        c: number,
-      ) {
-        const nums = [a, b, c];
+  const { circuit } = summon.compile({
+    path: '/src/main.ts',
+    boolifyWidth: 8,
+    files: {
+      '/src/main.ts': `
+        export default (io: Summon.IO) => {
+          const nums = [
+            io.input('alice', 'a', summon.number()),
+            io.input('bob', 'b', summon.number()),
+            io.input('charlie', 'c', summon.number()),
+          ];
 
-        let winner = 0;
-        let highest = a;
-        let secondHighest = 0;
+          let winner = 0;
+          let highest = nums[0];
+          let secondHighest = 0;
 
-        for (let i = 1; i < nums.length; i++) {
-          if (nums[i] > highest) {
-            secondHighest = highest;
-            highest = nums[i];
-            winner = i;
-          } else if (nums[i] > secondHighest) {
-            secondHighest = nums[i];
+          for (let i = 1; i < nums.length; i++) {
+            if (nums[i] > highest) {
+              secondHighest = highest;
+              highest = nums[i];
+              winner = i;
+            } else if (nums[i] > secondHighest) {
+              secondHighest = nums[i];
+            }
           }
-        }
 
-        return [winner, secondHighest];
-      }
-    `,
+          io.outputPublic('winner', winner);
+          io.outputPublic('price', secondHighest);
+        }
+      `,
+    },
   });
 
-  const mpcSettings = [
-    {
-      name: 'alice',
-      inputs: ['a'],
-      outputs: ['main[0]', 'main[1]'],
-    },
-    {
-      name: 'bob',
-      inputs: ['b'],
-      outputs: ['main[0]', 'main[1]'],
-    },
-    {
-      name: 'charlie',
-      inputs: ['c'],
-      outputs: ['main[0]', 'main[1]'],
-    },
-  ];
-
-  const protocol = new Protocol(
-    circuit,
-    mpcSettings,
-    new EmpWasmBackend(),
-  );
-
+  const protocol = new Protocol(circuit, new EmpWasmBackend());
   const aqs = new AsyncQueueStore<Uint8Array>();
 
   const outputs = await Promise.all([
@@ -183,9 +135,9 @@ test("vickrey(8, 17, 5) == [1, 8]", async () => {
   expect(outputs).to.deep.equal([
     // Participant index 1 (Bob) wins the auction with the highest bid, but only
     // pays the second highest bid. His actual bid is kept secret.
-    { 'main[0]': 1, 'main[1]': 8 },
-    { 'main[0]': 1, 'main[1]': 8 },
-    { 'main[0]': 1, 'main[1]': 8 },
+    { winner: 1, price: 8 },
+    { winner: 1, price: 8 },
+    { winner: 1, price: 8 },
   ]);
 });
 
@@ -203,7 +155,7 @@ async function runParty(
     },
   );
 
-  const partyNames = protocol.mpcSettings.map(
+  const partyNames = protocol.circuit.mpcSettings.map(
     ({ name }, i) => name ?? `party${i}`,
   );
 
