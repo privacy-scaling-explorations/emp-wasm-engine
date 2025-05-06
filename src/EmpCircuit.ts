@@ -1,4 +1,4 @@
-import { Circuit, MpcSettings } from "mpc-framework-common";
+import { Circuit, CircuitIOInfo } from "mpc-framework-common";
 import parseBristol, { Bristol } from "./parseBristol.js";
 import assert from "./assert.js";
 import never from "./never.js";
@@ -26,7 +26,8 @@ export default class EmpCircuit {
   private allInputs: string[];
   private outputs: string[];
 
-  private getOldAddress: (name: string) => number;
+  private getOldInputAddress: (name: string) => number;
+  private getOldOutputAddress: (name: string) => number;
 
   // old address -> new address
   private addressMap = new Map<number, number>();
@@ -53,11 +54,23 @@ export default class EmpCircuit {
 
     this.allInputs = [];
 
-    this.getOldAddress = (() => {
-      const addressesByName = new Map<string, number>([
-        ...circuit.info.inputs.map(input => [input.name, input.address] as const),
-        ...circuit.info.outputs.map(output => [output.name, output.address] as const),
-      ]);
+    this.getOldInputAddress = (() => {
+      const addressesByName = new Map<string, number>(
+        circuit.info.inputs.map(input => [input.name, input.address] as const),
+      );
+
+      return (name: string) => {
+        const address = addressesByName.get(name);
+        assert(address !== undefined, `Address for ${name} not found`);
+
+        return address;
+      };
+    })();
+
+    this.getOldOutputAddress = (() => {
+      const addressesByName = new Map<string, number>(
+        circuit.info.outputs.map(output => [output.name, output.address] as const),
+      );
 
       return (name: string) => {
         const address = addressesByName.get(name);
@@ -70,14 +83,14 @@ export default class EmpCircuit {
     for (const [i, partyName] of this.partyNames.entries()) {
       this.partyInputs[partyName] = circuit.mpcSettings[i].inputs.slice();
       this.partyInputs[partyName].sort((a, b) =>
-        this.getOldAddress(a) - this.getOldAddress(b),
+        this.getOldInputAddress(a) - this.getOldInputAddress(b),
       );
 
       this.allInputs.push(...this.partyInputs[partyName]);
     }
 
     this.allInputs.sort(
-      (a, b) => this.getOldAddress(a) - this.getOldAddress(b),
+      (a, b) => this.getOldInputAddress(a) - this.getOldInputAddress(b),
     );
 
     const outputNames = new Set<string>();
@@ -89,7 +102,9 @@ export default class EmpCircuit {
     }
 
     this.outputs = [...outputNames];
-    this.outputs.sort((a, b) => this.getOldAddress(a) - this.getOldAddress(b));
+    this.outputs.sort(
+      (a, b) => this.getOldOutputAddress(a) - this.getOldOutputAddress(b),
+    );
 
     // The emp-wasm engine requires each party's input bits to be contiguous.
     const allInputsInPartyOrder: string[] = [];
@@ -99,8 +114,8 @@ export default class EmpCircuit {
     }
 
     for (const inputName of allInputsInPartyOrder) {
-      const width = this.getInputWidth(inputName);
-      const oldAddress = this.getOldAddress(inputName);
+      const width = this.getInputInfo(inputName).width;
+      const oldAddress = this.getOldInputAddress(inputName);
       assert(oldAddress !== undefined, `Input ${inputName} not found`);
 
       for (let i = 0; i < width; i++) {
@@ -109,7 +124,7 @@ export default class EmpCircuit {
       }
     }
 
-    const oldFirstOutputAddress = this.getOldAddress(this.outputs[0]);
+    const oldFirstOutputAddress = this.getOldOutputAddress(this.outputs[0]);
 
     for (const g of this.bristol.gates) {
       let outputAddress: number;
@@ -203,14 +218,16 @@ export default class EmpCircuit {
 
     if (this.partyNames.length === 2) {
       inputBits0 = sum(
-        this.partyInputs[this.partyNames[0]].map((n) => this.getInputWidth(n)),
+        this.partyInputs[this.partyNames[0]]
+          .map((n) => this.getInputInfo(n).width),
       );
 
       inputBits1 = sum(
-        this.partyInputs[this.partyNames[1]].map((n) => this.getInputWidth(n)),
+        this.partyInputs[this.partyNames[1]]
+          .map((n) => this.getInputInfo(n).width),
       );
     } else {
-      inputBits0 = sum(this.allInputs.map((n) => this.getInputWidth(n)));
+      inputBits0 = sum(this.allInputs.map((n) => this.getInputInfo(n).width));
       inputBits1 = 0;
     }
 
@@ -243,18 +260,24 @@ export default class EmpCircuit {
     never(type);
   }
 
-  private getInputWidth(inputName: string): number {
-    const inputIndex = this.allInputs.indexOf(inputName);
-    assert(inputIndex !== -1, `Input ${inputName} not found`);
+  private getInputInfo(inputName: string): CircuitIOInfo {
+    const inputInfo = this.originalCircuit.info.inputs.find(
+      (input) => input.name === inputName,
+    );
 
-    return this.bristol.inputWidths[inputIndex];
+    assert(inputInfo !== undefined, `Input ${inputName} not found`);
+    
+    return inputInfo;
   }
 
-  private getOutputWidth(outputName: string): number {
-    const outputIndex = this.outputs.indexOf(outputName);
-    assert(outputIndex !== -1, `Output ${outputName} not found`);
+  private getOutputInfo(outputName: string): CircuitIOInfo {
+    const outputInfo = this.originalCircuit.info.outputs.find(
+      (output) => output.name === outputName,
+    );
 
-    return this.bristol.outputWidths[outputIndex];
+    assert(outputInfo !== undefined, `Output ${outputName} not found`);
+
+    return outputInfo;
   }
 
   hasPartyName(name: string): boolean {
@@ -277,7 +300,7 @@ export default class EmpCircuit {
 
   getInputBitsPerParty(): number[] {
     return this.partyNames.map((partyName) =>
-      sum(this.partyInputs[partyName].map((n) => this.getInputWidth(n))),
+      sum(this.partyInputs[partyName].map((n) => this.getInputInfo(n).width)),
     );
   }
 
@@ -318,15 +341,26 @@ export default class EmpCircuit {
 
     for (const inputName of inputNames) {
       const value = input[inputName];
-      const width = this.getInputWidth(inputName);
+      const { type, width } = this.getInputInfo(inputName);
 
-      assert(
-        typeof value === 'number',
-        `Expected input ${inputName} to be a number`,
-      );
+      if (type === 'number') {
+        assert(
+          typeof value === 'number',
+          `Expected input ${inputName} to be a number`,
+        );
 
-      for (let i = 0; i < width; i++) {
-        bits.push((value >> i) & 1 ? true : false);
+        for (let i = 0; i < width; i++) {
+          bits.push((value >> i) & 1 ? true : false);
+        }
+      } else if (type === 'bool') {
+        assert(
+          typeof value === 'boolean',
+          `Expected input ${inputName} to be a bool`,
+        );
+
+        bits.push(value);
+      } else {
+        assert(false, `Unknown input type ${type}`);
       }
     }
 
@@ -337,8 +371,8 @@ export default class EmpCircuit {
     const output: Record<string, unknown> = {};
 
     for (const outputName of this.outputs) {
-      const width = this.getOutputWidth(outputName);
-      const oldAddress = this.getOldAddress(outputName);
+      const { type, width } = this.getOutputInfo(outputName);
+      const oldAddress = this.getOldOutputAddress(outputName);
 
       let value = 0;
 
@@ -348,7 +382,13 @@ export default class EmpCircuit {
         value |= outputBits[address - this.firstOutputAddress] << i;
       }
 
-      output[outputName] = value;
+      if (type === 'number') {
+        output[outputName] = value;
+      } else if (type === 'bool') {
+        output[outputName] = Boolean(value);
+      } else {
+        assert(false, `Unknown output type ${type}`);
+      }
     }
 
     return output;
@@ -356,7 +396,7 @@ export default class EmpCircuit {
 
   eval(
     inputs: Record<string, Record<string, unknown>>,
-    //              ^ party name  ^ input name
+    //             ^ party name   ^ input name
     // eg: {
     //   alice: { a: 3 },
     //   bob: { b: 5 },

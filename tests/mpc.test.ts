@@ -141,10 +141,42 @@ test("vickrey(8, 17, 5) == [1, 8]", async () => {
   ]);
 });
 
+test('boolean io', async () => {
+  await summon.init();
+
+  const { circuit } = summon.compile({
+    path: '/src/main.ts',
+    boolifyWidth: 8,
+    files: {
+      '/src/main.ts': `
+        export default (io: Summon.IO) => {
+          const a = io.input('alice', 'a', summon.bool());
+          const b = io.input('bob', 'b', summon.bool());
+
+          io.outputPublic('res', a && b);
+        };
+      `,
+    },
+  });
+
+  const protocol = new Protocol(circuit, new EmpWasmEngine());
+  const aqs = new AsyncQueueStore<Uint8Array>();
+
+  const outputs = await Promise.all([
+    runParty(protocol, 'alice', { a: true }, aqs),
+    runParty(protocol, 'bob', { b: true }, aqs),
+  ]);
+
+  expect(outputs).to.deep.equal([
+    { res: true },
+    { res: true },
+  ]);
+});
+
 async function runParty(
   protocol: Protocol,
   party: string,
-  input: Record<string, number>,
+  input: Record<string, unknown>,
   aqs: AsyncQueueStore<Uint8Array>,
 ) {
   const session = protocol.join(
