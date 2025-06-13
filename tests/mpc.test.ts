@@ -87,7 +87,7 @@ test("middle(8, 17, 5) == 8", async () => {
 });
 
 // FIXME: use 5 bidders and auction house (which doesn't bid but observes)
-test("vickrey(8, 17, 5) == [1, 8]", async () => {
+test("vickrey(8, 17, 5, 1, 70) == [4, 17]", { only: true }, async () => {
   await summon.init();
 
   const { circuit } = summon.compile({
@@ -100,7 +100,11 @@ test("vickrey(8, 17, 5) == [1, 8]", async () => {
             io.input('alice', 'a', summon.number()),
             io.input('bob', 'b', summon.number()),
             io.input('charlie', 'c', summon.number()),
+            io.input('dave', 'd', summon.number()),
+            io.input('eve', 'e', summon.number()),
           ];
+
+          io.addParty('auctionHouse');
 
           let winner = 0;
           let highest = nums[0];
@@ -130,14 +134,20 @@ test("vickrey(8, 17, 5) == [1, 8]", async () => {
     runParty(protocol, 'alice', { a: 8 }, aqs),
     runParty(protocol, 'bob', { b: 17 }, aqs),
     runParty(protocol, 'charlie', { c: 5 }, aqs),
+    runParty(protocol, 'dave', { d: 1 }, aqs),
+    runParty(protocol, 'eve', { e: 70 }, aqs),
+    runParty(protocol, 'auctionHouse', {}, aqs),
   ]);
 
   expect(outputs).to.deep.equal([
-    // Participant index 1 (Bob) wins the auction with the highest bid, but only
-    // pays the second highest bid. His actual bid is kept secret.
-    { winner: 1, price: 8 },
-    { winner: 1, price: 8 },
-    { winner: 1, price: 8 },
+    // Participant index 4 (Eve) wins the auction with the highest bid, but only
+    // pays the second highest bid. Her actual bid is kept secret.
+    { winner: 4, price: 17 },
+    { winner: 4, price: 17 },
+    { winner: 4, price: 17 },
+    { winner: 4, price: 17 },
+    { winner: 4, price: 17 },
+    { winner: 4, price: 17 },
   ]);
 });
 
