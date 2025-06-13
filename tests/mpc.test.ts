@@ -241,8 +241,14 @@ test('compile sha256', async () => {
   await getSha256Circuit();
 });
 
-test("sha256('summon') == 28..99", { skip: true }, async () => {
+test("sha256('summon') == 28..99", async () => {
+  const start = Date.now();
   const { circuit } = await getSha256Circuit();
+
+  // We rely (perhaps improperly) on `compile sha256` to have already been run
+  // so that the circuit is already cached. This way the test provides a measure
+  // of MPC performance, separate from summon compiling sha256.
+  expect(Date.now() - start).to.be.lessThan(50, 'Circuit should have been cached');
 
   const protocol = new Protocol(circuit, new EmpWasmEngine());
   const aqs = new AsyncQueueStore<Uint8Array>();

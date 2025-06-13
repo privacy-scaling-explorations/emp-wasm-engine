@@ -3,7 +3,6 @@ import {
   EngineSession,
   checkSettingsValid,
   Circuit,
-  MpcSettings,
 } from "mpc-framework-common";
 import EmpWasmSession from "./EmpWasmSession.js";
 import EmpCircuit from "./EmpCircuit.js";
