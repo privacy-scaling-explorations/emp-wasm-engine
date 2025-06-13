@@ -56,12 +56,16 @@ export async function runSuite() {
       continue;
     }
 
+    const start = Date.now();
+
     try {
       await fn();
-      console.log(`✅ ${name}`);
+      const end = Date.now();
+      console.log(`✅ ${name} (${end - start}ms)`);
     } catch (e) {
+      const end = Date.now();
       failures++;
-      console.error(`❌ ${name}`);
+      console.error(`❌ ${name} (${end - start}ms)`);
 
       if (!puppeteerDetected) {
         console.error(e);
