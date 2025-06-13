@@ -33,7 +33,7 @@
     "glob": "^11.0.1",
     "mpc-framework": "^0.3.0",
     "puppeteer-core": "^24.1.0",
-    "summon-ts": "^0.6.0",
+    "summon-ts": "^0.6.1",
     "tsx": "^4.9.3",
     "typescript": "^5.4.5",
     "vite": "^6.0.7"
