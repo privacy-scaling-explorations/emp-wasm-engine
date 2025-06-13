@@ -60,7 +60,7 @@ export default class EmpWasmSession implements EngineSession {
       if (partyName !== this.thisPartyName) {
         const setupHashReceived = await this.bqs
           .get(partyName, 'a')
-          .pop(setupHash.length);
+          .pop(setupHash.length, setupHash.length);
 
         if (!buffersEqual(setupHash, setupHashReceived)) {
           throw new Error(`Setup hash mismatch with ${partyName}`);
@@ -77,8 +77,8 @@ export default class EmpWasmSession implements EngineSession {
       io: {
         send: (toParty, channel, data) =>
           this.send(this.empCircuit.partyNameFromIndex(toParty), channel, data),
-        recv: (fromParty, channel, len) =>
-          this.bqs.get(this.empCircuit.partyNameFromIndex(fromParty), channel).pop(len),
+        recv: (fromParty, channel, min_len, max_len) =>
+          this.bqs.get(this.empCircuit.partyNameFromIndex(fromParty), channel).pop(min_len, max_len),
       },
     });
 
