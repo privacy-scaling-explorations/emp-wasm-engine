@@ -241,39 +241,60 @@ test('compile sha256', async () => {
   await getSha256Circuit();
 });
 
-test("sha256('summon') == 28..99", async () => {
-  const start = Date.now();
-  const { circuit } = await getSha256Circuit();
+for (let nParties = 2; nParties <= 4; nParties++) {
+  test(`sha256('summon') == 28..99 (${nParties} parties)`, async () => {
+    const start = Date.now();
+    let { circuit } = await getSha256Circuit();
+    circuit = structuredClone(circuit);
 
-  // We rely (perhaps improperly) on `compile sha256` to have already been run
-  // so that the circuit is already cached. This way the test provides a measure
-  // of MPC performance, separate from summon compiling sha256.
-  expect(Date.now() - start).to.be.lessThan(50, 'Circuit should have been cached');
+    const partyNames = ['alice', 'bob', 'charlie', 'dave'];
+    expect(partyNames.length).to.be.greaterThanOrEqual(nParties);
 
-  const protocol = new Protocol(circuit, new EmpWasmEngine());
-  const aqs = new AsyncQueueStore<Uint8Array>();
+    while (circuit.mpcSettings.length < nParties) {
+      const partyIndex = circuit.mpcSettings.length;
+      const name = partyNames[partyIndex];
 
-  const summonBits = [...'summon']
-    .map(c => c.codePointAt(0)!.toString(2).padStart(8, '0'))
-    .join('').split('')
-    .map(bit => bit === '0' ? false : true);
+      circuit.mpcSettings.push({
+        name,
+        inputs: [],
+        outputs: circuit.mpcSettings[0].outputs,
+      })
+    }
 
-  const aliceInputs = Object.fromEntries(summonBits.entries().map(
-    ([i, boolBit]) => [`input${i}`, boolBit],
-  ));
+    // We rely (perhaps improperly) on `compile sha256` to have already been run
+    // so that the circuit is already cached. This way the test provides a measure
+    // of MPC performance, separate from summon compiling sha256.
+    expect(Date.now() - start).to.be.lessThan(50, 'Circuit should have been cached');
 
-  const outputs = await Promise.all([
-    runParty(protocol, 'alice', aliceInputs, aqs),
-    runParty(protocol, 'bob', {}, aqs),
-  ]);
+    const protocol = new Protocol(circuit, new EmpWasmEngine());
+    const aqs = new AsyncQueueStore<Uint8Array>();
 
-  for (const output of outputs) {
-    const bits = range(256).map(i => output[`output${i}`] as boolean);
-    const outputHex = bitsToHex(bits);
+    const summonBits = [...'summon']
+      .map(c => c.codePointAt(0)!.toString(2).padStart(8, '0'))
+      .join('').split('')
+      .map(bit => bit === '0' ? false : true);
 
-    expect(outputHex).to.eq('2815cb02b95b6d15383bf551f09b33e01806ad2f4221b035a592c1be146d6a99');
-  }
-});
+    const aliceInputs = Object.fromEntries(summonBits.entries().map(
+      ([i, boolBit]) => [`input${i}`, boolBit],
+    ));
+
+    const outputs = await Promise.all(
+      range(nParties).map(partyIndex => runParty(
+        protocol,
+        partyNames[partyIndex],
+        partyIndex === 0 ? aliceInputs : {},
+        aqs,
+      )),
+    );
+
+    for (const output of outputs) {
+      const bits = range(256).map(i => output[`output${i}`] as boolean);
+      const outputHex = bitsToHex(bits);
+
+      expect(outputHex).to.eq('2815cb02b95b6d15383bf551f09b33e01806ad2f4221b035a592c1be146d6a99');
+    }
+  });
+}
 
 function range(limit: number) {
   let res: number[] = [];
