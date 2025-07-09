@@ -349,8 +349,10 @@ export default class EmpCircuit {
           `Expected input ${inputName} to be a number`,
         );
 
+        let v = BigInt(value);
         for (let i = 0; i < width; i++) {
-          bits.push((value >> i) & 1 ? true : false);
+          bits.push(v % 2n === 1n ? true : false);
+          v /= 2n;
         }
       } else if (type === 'bool') {
         assert(
@@ -379,7 +381,7 @@ export default class EmpCircuit {
       for (let i = 0; i < width; i++) {
         const address = this.addressMap.get(oldAddress + i);
         assert(address !== undefined, `Address ${oldAddress + i} not found`);
-        value |= outputBits[address - this.firstOutputAddress] << i;
+        value += outputBits[address - this.firstOutputAddress] * 2 ** i;
       }
 
       if (type === 'number') {

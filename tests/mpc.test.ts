@@ -87,7 +87,7 @@ test("middle(8, 17, 5) == 8", async () => {
 });
 
 // FIXME: use 5 bidders and auction house (which doesn't bid but observes)
-test("vickrey(8, 17, 5, 1, 70) == [4, 17]", { only: true }, async () => {
+test("vickrey(8, 17, 5, 1, 70) == [4, 17]", async () => {
   await summon.init();
 
   const { circuit } = summon.compile({
