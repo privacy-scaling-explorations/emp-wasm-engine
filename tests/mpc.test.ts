@@ -86,7 +86,6 @@ test("middle(8, 17, 5) == 8", async () => {
   ]);
 });
 
-// FIXME: use 5 bidders and auction house (which doesn't bid but observes)
 test("vickrey(8, 17, 5, 1, 70) == [4, 17]", async () => {
   await summon.init();
 
@@ -193,8 +192,9 @@ const getSha256Circuit = (() => {
 
     await summon.init();
 
-    const libVersion = 'c24b5f32ccb8d8ffe77fb1465425a0575012b4b7';
-    const ghPse = 'https://raw.githubusercontent.com/privacy-scaling-explorations';
+    const libVersion = 'fe3b4b5be99e8898bc8ecce2b196d675fff5e37d';
+    const ghPse =
+      'https://raw.githubusercontent.com/privacy-scaling-explorations';
     const libBase = `${ghPse}/summon-lib/${libVersion}`;
 
     async function downloadLib(path: string) {
@@ -239,7 +239,9 @@ const getSha256Circuit = (() => {
           }
         `,
         '/src/deps/sha256/mod.ts': await downloadLib('sha256/mod.ts'),
-        '/src/deps/sha256/sha256Compress.ts': await downloadLib('sha256/sha256Compress.ts'),
+        '/src/deps/sha256/sha256Compress.ts': await downloadLib(
+          'sha256/sha256Compress.ts',
+        ),
       },
     });
 
@@ -268,40 +270,56 @@ for (let nParties = 2; nParties <= 4; nParties++) {
         name,
         inputs: [],
         outputs: circuit.mpcSettings[0].outputs,
-      })
+      });
     }
 
     // We rely (perhaps improperly) on `compile sha256` to have already been run
     // so that the circuit is already cached. This way the test provides a measure
     // of MPC performance, separate from summon compiling sha256.
-    expect(Date.now() - start).to.be.lessThan(50, 'Circuit should have been cached');
+    expect(Date.now() - start).to.be.lessThan(
+      50,
+      'Circuit should have been cached',
+    );
 
     const protocol = new Protocol(circuit, new EmpWasmEngine());
     const aqs = new AsyncQueueStore<Uint8Array>();
 
-    const summonBits = [...'summon']
-      .map(c => c.codePointAt(0)!.toString(2).padStart(8, '0'))
-      .join('').split('')
-      .map(bit => bit === '0' ? false : true);
+    // Convert 'summon' to little-endian bits using TextEncoder
+    const encoder = new TextEncoder();
+    const summonBytes = encoder.encode('summon');
+    const summonBits: boolean[] = [];
 
-    const aliceInputs = Object.fromEntries(summonBits.entries().map(
-      ([i, boolBit]) => [`input${i}`, boolBit],
-    ));
+    for (const byte of summonBytes) {
+      // Convert each byte to bits with least significant bit first
+      for (let i = 0; i < 8; i++) {
+        summonBits.push((byte & (1 << i)) !== 0);
+      }
+    }
+
+    const aliceInputs = Object.fromEntries(
+      summonBits.entries().map(
+        ([i, boolBit]) => [`input${i}`, boolBit],
+      ),
+    );
 
     const outputs = await Promise.all(
-      range(nParties).map(partyIndex => runParty(
-        protocol,
-        partyNames[partyIndex],
-        partyIndex === 0 ? aliceInputs : {},
-        aqs,
-      )),
+      range(nParties).map((partyIndex) =>
+        runParty(
+          protocol,
+          partyNames[partyIndex],
+          partyIndex === 0 ? aliceInputs : {},
+          aqs,
+        )
+      ),
     );
 
     for (const output of outputs) {
-      const bits = range(256).map(i => output[`output${i}`] as boolean);
+      const bits = range(256).map((i) => output[`output${i}`] as boolean);
       const outputHex = bitsToHex(bits);
 
-      expect(outputHex).to.eq('2815cb02b95b6d15383bf551f09b33e01806ad2f4221b035a592c1be146d6a99');
+      expect(outputHex).to.eq(
+        '2815cb02b95b6d15383bf551f09b33e01806ad2f4221b035a592c1be146d6a99',
+      );
     }
   });
 }
@@ -328,7 +346,7 @@ function bitsToHex(bits: boolean[]) {
 
     for (let j = 0; j < 8; j++) {
       const bit = Number(bits[i + j]);
-      byte |= bit << (7 - j);
+      byte |= bit << j;
     }
 
     res += byte.toString(16).padStart(2, '0');
@@ -358,7 +376,7 @@ async function runParty(
   for (const otherParty of partyNames) {
     if (otherParty !== party) {
       aqs.get(otherParty, party).stream(
-        data => session.handleMessage(otherParty, data),
+        (data) => session.handleMessage(otherParty, data),
       );
     }
   }
